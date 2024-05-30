@@ -1,41 +1,49 @@
 import Conversation from "../models/conversation.model.js"
 import Message from "../models/message.model.js"
+import { getReceiverSocketId,io } from "../socket/socket.js"
 
 export const sendMessage = async (req, res) => {
     try{
         const {message} = req.body
-        const {id:receriverId} = req.params
+        const {id:receiverId} = req.params
         const senderId = req.user._id
 
         let conversation = await Conversation.findOne({
-            participants: { $all: [senderId, receriverId]},
+            participants: { $all: [senderId, receiverId]},
         })
 
         if(!conversation) {
             conversation = await Conversation.create({
-                participants: [senderId,receriverId],
+                participants: [senderId,receiverId],
             })
 
         }
 
         const newMessage = new Message({
             senderId,
-            receriverId,
+            receiverId,
             message
         })
 
         if(newMessage) {
             conversation.messages.push(newMessage._id)
         }
-
-        // SOCKET IO FUNC WILL ADD  HERE
-
         // await conversation.save() 1
         // await newMessage.save() 2
 
 
         // this will run in parallel
         await Promise.all([conversation.save(), newMessage.save()])
+
+
+        // SOCKET IO FUNC WILL ADD  HERE
+		const receiverSocketId = getReceiverSocketId(receiverId);
+		if (receiverSocketId) {
+			// io.to(<socket_id>).emit() used to send events to specific client
+			io.to(receiverSocketId).emit("newMessage", newMessage);
+		}
+
+
 
         res.status(201).json(newMessage)
 
